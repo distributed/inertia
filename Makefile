@@ -1,4 +1,4 @@
-COBJS=main.o
+COBJS=main.o scroll.o font_5x8.o
 ASMOBJS=
 
 CCARCH=attiny44
@@ -16,6 +16,7 @@ CFLAGS+=-gstabs
 CFLAGS+=-DF_CPU=${F_CPU}
 CFLAGS+=-std=c99
 CFLAGS+=-Wall
+#CFLAGS+=-mcall-prologues
 
 ASMCFLAGS=-mmcu=${CCARCH}
 ASMCFLAGS+=-DF_CPU=${F_CPU}
