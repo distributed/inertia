@@ -143,6 +143,9 @@ int main() {
 	cli();
 	if ((!isr_attention) && (!scroll.active) &&
 	    (!key_state) && (!sleep_inhibit)) {
+	    // if there's _nothing_ to do and nothing going on,
+	    // go to deep sleep
+
 	    //if (sleep_inhibit) continue;
 
 
@@ -160,7 +163,8 @@ int main() {
 
 	    sleep_inhibit = SLEEP_INHIBIT;
 	} else if (!isr_attention) {
-
+	    // if there's nothing to do, but stuff going on,
+	    // enter shallow sleep
 
 	    set_sleep_mode(SLEEP_MODE_IDLE);
 	    sleep_enable();
