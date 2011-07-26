@@ -4,9 +4,14 @@
 #include <util/delay.h>
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
+#include <avr/sleep.h>
 
 #include "scroll.h"
 #include "font_5x8.h"
+
+#define SLEEP_INHIBIT (20)
+
+uint8_t isr_attention;
 
 scrollstate scroll;
 
@@ -33,7 +38,7 @@ void ioinit() {
         DDRA = ~(1<<PA4);
         DDRB = (1<<PB1)|(1<<PB0);
 
-        PORTA = (1<<PA7);
+        //PORTA = (1<<PA7);
 
         // turn on pullup for button
         PORTB |= (1<<PB2);
@@ -78,13 +83,19 @@ ISR(TIM0_COMPA_vect)
     }*/
 
   key_update = 1;
+  isr_attention = 1;
 }
 
+ISR(INT0_vect) {
+    // wake up from sleep
+    GIMSK &= ~(1<<INT0); // disable INT0
+}
 
 PROGMEM uint8_t msgs[] = "T\x81" "echli\0Z\x84pfli\0TCB\0RNR\0Fuck\0Yeah\0";
 
 int main() {
     
+    PRR = (1<<PRTIM1)|(1<<PRUSI)|(1<<PRADC); // disable timer1, usi, adc
 
     OCR0A = ((F_CPU * 25UL) / 10000UL) / 64UL; // see multiplicator, in
                                                // 1/10^4 ths of a second
@@ -101,9 +112,11 @@ int main() {
 
     uint8_t msgcnt = 0;
     uint8_t *msgsp = msgs;
+    uint8_t sleep_inhibit = SLEEP_INHIBIT;
     while (1) {
-	if (key_update) {
-	    if (scroll.active) continue;
+	if (key_update && (!scroll.active)) {
+	    //if (scroll.active) continue;
+	    if (sleep_inhibit) sleep_inhibit--;
 
 	    if (key_press) {
 
@@ -125,6 +138,27 @@ int main() {
 	    }
 	    key_update = 0;
 	}
+
+	if ((!isr_attention) && (!scroll.active) &&
+	    (!key_state) && (!sleep_inhibit)) {
+	    //if (sleep_inhibit) continue;
+
+	    cli();
+
+	    GIMSK |= (1<<INT0); // enable INT0, default is low level
+
+	    set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+	    sleep_enable();
+	    sei();
+	    sleep_cpu();
+
+	    sleep_disable();
+
+	    //GIMSK &= ~(1<<INT0); // disable INT0
+
+	    sleep_inhibit = SLEEP_INHIBIT;
+	}
+	isr_attention = 0;
     }
 }
 
