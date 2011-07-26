@@ -139,11 +139,13 @@ int main() {
 	    key_update = 0;
 	}
 
+
+	cli();
 	if ((!isr_attention) && (!scroll.active) &&
 	    (!key_state) && (!sleep_inhibit)) {
 	    //if (sleep_inhibit) continue;
 
-	    cli();
+
 
 	    GIMSK |= (1<<INT0); // enable INT0, default is low level
 
@@ -158,6 +160,7 @@ int main() {
 
 	    sleep_inhibit = SLEEP_INHIBIT;
 	}
+	sei();
 	isr_attention = 0;
     }
 }
