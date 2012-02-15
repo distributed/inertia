@@ -91,7 +91,8 @@ ISR(INT0_vect) {
     GIMSK &= ~(1<<INT0); // disable INT0
 }
 
-PROGMEM uint8_t msgs[] = "T\x81" "echli\0Z\x84pfli\0TCB\0RNR\0Fuck\0Yeah\0";
+PROGMEM uint8_t msgs[] = "T\x81" "echli\0Z\x84pfli\0Ficken Geil\0Fuck\0Yeah\0";
+//PROGMEM uint8_t msgs[] = "Em Dani sini Muetter\0esch mega FETT!\0";
 
 int main() {
     
