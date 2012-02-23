@@ -116,45 +116,13 @@ void ioinit() {
 }
 
 
-// debounce routines by Peter Danegger
-volatile uint8_t key_state;   // debounced and inverted key state:
-                              // bit = 1: key pressed
-volatile uint8_t key_press;   // key press detect
+volatile uint16_t rt_hi;
+#define SYNC_LOCK_INIT (30) // ~ 60 ms lockout
+volatile uint8_t sync_locked;
  
-volatile uint8_t key_rpt;     // key long press and repeat
-
-volatile uint8_t key_update;
-
- 
-ISR(TIM0_COMPA_vect)
-{
-    static uint8_t ct0, ct1; //, rpt;
-  uint8_t i;
-
-  uint16_t sret = scroll_step(&scroll);
-  if (sret > 0) {
-      //output column
-      output_column((uint8_t) sret);
-  }
-
-  i = key_state ^ ~(((PINB & (1<<PB2)) | (~(1<<PB2))));                       // key changed ?
-  ct0 = ~( ct0 & i );                             // reset or count ct0
-  ct1 = ct0 ^ (ct1 & i);                          // reset or count ct1
-  i &= ct0 & ct1;                                 // count until roll over ?
-  key_state ^= i;                                 // then toggle debounced state
-  key_press |= key_state & i;                     // 0->1: key press detect
- 
-
-  //output_column(key_state);
-		    /*  if( (key_state & REPEAT_MASK) == 0 )            // check repeat function
-     rpt = REPEAT_START;                          // start delay
-  if( --rpt == 0 ){
-    rpt = REPEAT_NEXT;                            // repeat delay
-    key_rpt |= key_state & REPEAT_MASK;
-    }*/
-
-  key_update = 1;
-  isr_attention = 1;
+ISR(TIM0_OVF_vect) {
+    rt_hi++;
+    if (sync_locked) sync_locked--;
 }
 
 ISR(INT0_vect) {
@@ -162,91 +130,58 @@ ISR(INT0_vect) {
     GIMSK &= ~(1<<INT0); // disable INT0
 }
 
-PROGMEM uint8_t msgs[] = "T\x81" "echli\0Z\x84pfli\0Ficken Geil\0Fuck\0Yeah\0";
-//PROGMEM uint8_t msgs[] = "Em Dani sini Muetter\0esch mega FETT!\0";
+
+volatile uint8_t locked;
+volatile uint16_t nrad;
+volatile uint8_t lastkey = (1<<PB2);
+
+volatile uint32_t turntime;
+
+ISR(TIM1_COMPA_vect) {
+    if (locked) {
+	output_column(nrad++);
+    }
+
+    uint8_t l_lastkey = lastkey;
+    uint8_t key = PINB & (1<<PB2);
+    if (!sync_locked) {
+	if ((l_lastkey ^ key) && (!key)) {
+	    // sync!
+	    sync_locked = SYNC_LOCK_INIT;
+	    nrad = 0;
+	    turntime = 0;
+	}
+    }
+    lastkey = key;
+
+    turntime += TCNT1;
+}
 
 int main() {
     
-    PRR = (1<<PRTIM1)|(1<<PRUSI)|(1<<PRADC); // disable timer1, usi, adc
+    PRR = (0<<PRTIM1)|(1<<PRUSI)|(1<<PRADC); // disable timer1, usi, adc
 
-    OCR0A = ((F_CPU * 25UL) / 10000UL) / 64UL; // see multiplicator, in
-                                               // 1/10^4 ths of a second
-    TCCR0A = (1<<WGM01)|(0<<WGM00); // CTC
-    TCCR0B = (0<<CS02)|(1<<CS01)|(1<<CS00); // 1/64
-    TIMSK0 = (1<<OCIE0A);
+    TCCR0A = 0; // normal
+    TCCR0B = (0<<CS02)|(0<<CS01)|(1<<CS00); // 1/8
+    TIMSK0 = (1<<TOIE0); // timer triggers ~ 490 times/s. cycle time ~ 2 ms
+
+    //             ps   #rads #rots/s
+    OCR1A = F_CPU / 8 / 256 / 2;
+    TCCR1A  = (1<<WGM11)|(1<<WGM10);
+    //        fast PWM to OCR1A                    1/8
+    TCCR1B  = (1<<WGM13)|(1<<WGM12) | (0<<CS12)|(1<<CS11)|(0<<CS10); 
+    
 
     ioinit();
 
     sei();
     
     output_column(0x0f);
+    _delay_ms(50);
+    output_column(0x00);
 
-
-    uint8_t msgcnt = 0;
-    uint8_t *msgsp = msgs;
-    uint8_t sleep_inhibit = SLEEP_INHIBIT;
     while (1) {
-	if (key_update && (!scroll.active)) {
-	    //if (scroll.active) continue;
-	    if (sleep_inhibit) sleep_inhibit--;
 
-	    if (key_press) {
-
-		msgcnt++;
-		if (msgcnt == 4) msgcnt = 0;
-
-		scroll_init(&scroll, (uint8_t*) msgsp, (uint8_t*) font5x8, 5, SCROLL_FORWARD);
-		
-		msgsp += strlen_P(msgsp) + 1;
-		if (!pgm_read_byte(msgsp)) {
-		    msgsp = (uint8_t*) msgs;
-		}
-		
-		scroll.active = 1;
-
-		key_press = 0;
-	    } else {
-		output_column(0x00);
-	    }
-	    key_update = 0;
-	}
-
-
-	cli();
-	if ((!isr_attention) && (!scroll.active) &&
-	    (!key_state) && (!sleep_inhibit)) {
-	    // if there's _nothing_ to do and nothing going on,
-	    // go to deep sleep
-
-	    //if (sleep_inhibit) continue;
-
-
-
-	    GIMSK |= (1<<INT0); // enable INT0, default is low level
-
-	    set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-	    sleep_enable();
-	    sei();
-	    sleep_cpu();
-
-	    sleep_disable();
-
-	    //GIMSK &= ~(1<<INT0); // disable INT0
-
-	    sleep_inhibit = SLEEP_INHIBIT;
-	} else if (!isr_attention) {
-	    // if there's nothing to do, but stuff going on,
-	    // enter shallow sleep
-
-	    set_sleep_mode(SLEEP_MODE_IDLE);
-	    sleep_enable();
-	    sei();
-	    sleep_cpu();
-
-	    sleep_disable();
-	}
-	sei();
-	isr_attention = 0;
     }
 }
 
