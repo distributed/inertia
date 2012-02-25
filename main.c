@@ -181,7 +181,13 @@ int main() {
     output_column(0x00);
 
     while (1) {
+	cli();
+	set_sleep_mode(SLEEP_MODE_IDLE);
+	sleep_enable();
+	sei();
+	sleep_cpu();
 
+	sleep_disable();
     }
 }
 
