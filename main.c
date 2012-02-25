@@ -162,7 +162,7 @@ int main() {
     PRR = (0<<PRTIM1)|(1<<PRUSI)|(1<<PRADC); // disable timer1, usi, adc
 
     TCCR0A = 0; // normal
-    TCCR0B = (0<<CS02)|(0<<CS01)|(1<<CS00); // 1/8
+    TCCR0B = (0<<CS02)|(1<<CS01)|(0<<CS00); // 1/8
     TIMSK0 = (1<<TOIE0); // timer triggers ~ 490 times/s. cycle time ~ 2 ms
 
     //             ps   #rads #rots/s
@@ -170,6 +170,7 @@ int main() {
     TCCR1A  = (1<<WGM11)|(1<<WGM10);
     //        fast PWM to OCR1A                    1/8
     TCCR1B  = (1<<WGM13)|(1<<WGM12) | (0<<CS12)|(1<<CS11)|(0<<CS10); 
+    TIMSK1 = (1<<OCIE1A);
     
 
     ioinit();
